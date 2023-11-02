@@ -32,7 +32,7 @@ bm <- brm(
   ),
   chains = 4, cores = 4, iter = 2000, seed = 1234)
 
-dsmall <- d %>% select(polytob_recode, country_n)
+dsmall <- d %>% select(polytob_recode, ID, country_n)
 
 bm2 <-
   brm(data = list(polytob_recode = polytob_recode), 
@@ -58,6 +58,8 @@ bm_nl <-
       iter = 2000, warmup = 1000, cores = 4, chains = 4,
       seed = 11,
       file = "code/fits/bm_nl")
+
+bm_nl <- readRDS(here("code/fits", "bm_nl.rds")) 
 
 t <- as_draws(bm_nl)
 
@@ -96,4 +98,15 @@ bm_nl_ml <-
       iter = 2000, warmup = 1000, cores = 4, chains = 4,
       seed = 294,
       file = "code/fits/bm_nl_ml")
+
+
+dm <- d %>% filter(sex==1) %>% mutate(poly = ifelse(polytob_recode==3,1,0))
+
+bm_m <-
+  brm(poly ~ (1 | country_n),
+      data = dm, 
+      family = bernoulli(),
+      prior = c(prior(exp(1), class = sd)))
+         
+
   

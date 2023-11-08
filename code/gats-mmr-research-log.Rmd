@@ -1,0 +1,74 @@
+---
+title: "Notes on GATS analysis"
+output: html_notebook
+---
+```{r setup, message=FALSE, results=FALSE}
+library(here)
+library(tidyverse)
+library(haven)
+library(modelsummary)
+library(labelled)
+```
+
+## 2023-11-08
+The main purpose of this analysis is to generate estimates of dual and poly tobacco use across countries, and to look at associations with demographic (age, gender, education, wealth) and tobacco-specific (rules at home about tobacco use, knowledge about dangers of tobacco, etc.) covariates. 
+
+The main data source is the Global Adult Tobacco Surveys (GATS, from which years?), but some recoding is necessary because there are a number of issues with sparse cells, especially for some countries. 
+
+Given that both dual and poly tobacco use is generally rare
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+gats <- read_sav(here("data-clean",
+  "FOR MULTINOMIAL MULTILEVEL REGRESSION.sav"))
+# add the SPSS labels
+gats <- to_factor(gats)
+datasummary_skim(gats)
+```
+
+Some empty cells by country with respect to education categories:
+```{r}
+gats %>% group_by(country_n, education) %>%
+  tally() %>%
+  spread(education, n)
+```
+
+You can see that, for example, there are no observations with `Primary` education in Ethiopia and only n=39 in Kazakisthan. We will recode this to 3 levels of education (<Secondary, Secondary, >Secondary). 
+
+We have a similar problem for the wealth quintile variable, which appears to be based on the distribution across all countries. Here are the weighted quintiles for the entire sample:
+
+```{r}
+gats %>% group_by(wealthquintile) %>%
+  summarise(n = sum(gatsweight)) %>%
+  mutate(pct = n / sum(n) * 100)
+```
+
+But looking by country, there are very different estimates across the quintiles, and in some cases countries with no observations in some quintiles.
+
+```{r}
+gats %>% group_by(country_n, wealthquintile) %>%
+  tally() %>%
+  spread(wealthquintile, n)
+```
+
+You can see there are no observations in the first quintile for Costa Rica or Turkey. So it also makes sense to categorize the wealth quintiles in to, say, 3 groups (1/2, 3, 4/5).
+
+The `knowscore` variable is also rather unevenly distributed, even for the entire sample:
+```{r}
+gats %>% group_by(knowscore) %>%
+  summarise(n = sum(gatsweight)) %>%
+  mutate(pct = n / sum(n) * 100)
+```
+
+Collapsing these categories into a reasonable set of 3:
+```{r}
+gats %>% 
+  mutate(knows = ifelse(knowscore<=3, 1, 
+    ifelse(knowscore>3 & knowscore<8, 2, 
+      ifelse(knowscore>=8, 3, NA)))) %>%
+  group_by(knows) %>%
+  summarise(n = sum(gatsweight)) %>%
+  mutate(pct = n / sum(n) * 100)
+```
+

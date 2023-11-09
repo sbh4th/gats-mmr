@@ -76,6 +76,7 @@ d1 <- d %>%
 
 # add some labels
 d2 <- d1 %>%
+  remove_var_label() %>%
   set_variable_labels(
   id = "Individual ID",
   strata = "GATS survey strata",
@@ -96,17 +97,6 @@ d2 <- d1 %>%
 
 datasummary_skim(d2)
 
-   
-         
-         
-
-
-group_by(education, educ3) %>% tally() %>%
-  spread(education, n)
-%>%
-  group_by(agegp) %>%
-  summarise(min = min(AGE), max = max(AGE), n = n())
-          )
          
 
   

@@ -4,6 +4,7 @@ library(haven)
 library(modelsummary)
 library(brms)
 library(tidybayes)
+
 # Use the cmdstanr backend for Stan
 # You need to install the cmdstanr package first
 # (https://mc-stan.org/cmdstanr/) and then run cmdstanr::install_cmdstan() to
@@ -11,8 +12,8 @@ library(tidybayes)
 options(mc.cores = 4,
         brms.backend = "cmdstanr")
 
-d <- read_sav(here("data-clean",
-  "FOR MULTINOMIAL MULTILEVEL REGRESSION.sav"))
+# read in the cleaned GATS data
+gd <- read_csv(here("data-clean", "gats-clean.csv"))
 
 des <- svydesign(ids = ~gatscluster, strata = ~gatsstrata, 
   weights = ~gatsweight, 

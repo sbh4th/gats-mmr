@@ -15,11 +15,23 @@ options(mc.cores = 4,
 # read in the cleaned GATS data
 gd <- read_csv(here("data-clean", "gats-clean.csv"))
 
-des <- svydesign(ids = ~gatscluster, strata = ~gatsstrata, 
-  weights = ~gatsweight, 
-  data = d, nest = TRUE)
+# Table 1
 
-#  data = brfss_11[is.na(brfss_11$cntywt)==F,], nest=T )
+# Observed proportions of outcome
+gd %>% group_by(numtob) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n / sum(n) * 100)
+
+# Simple Bayesian model
+
+gds <- gd %>% slice_sample(prop = 0.05)
+
+m1 <- brm(numtob ~ 1 + (1 | country), 
+          data = gds, 
+          family = categorical(link = "logit"))
+
+
+
 
 
 bm <- brm(
@@ -33,7 +45,7 @@ bm <- brm(
   ),
   chains = 4, cores = 4, iter = 2000, seed = 1234)
 
-dsmall <- d %>% select(polytob_recode, ID, country_n)
+dsmall <- gd %>% select(numtob, id, country)
 
 bm2 <-
   brm(data = list(polytob_recode = polytob_recode), 

@@ -97,6 +97,9 @@ d2 <- d1 %>%
 
 datasummary_skim(d2)
 
+# write to file
+write_csv(d2, here("data-clean", "gats-clean.csv"))
+
          
 
   

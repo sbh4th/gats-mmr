@@ -47,6 +47,8 @@ fitted(m1)[1, , ] %>%
   round(digits = 2) %>% 
   t()
 
+# load model results (if already run)
+m1 <- readRDS(here("code/fits", "m1.rds")) 
 
 
 bm <- brm(
@@ -115,11 +117,11 @@ as_draws_df(bm_nl) %>%
 bm_nl_ml <-
   brm(data = gds, 
     family = categorical(link = logit, refcat = 0),
-    bf(numtob ~ (1 | country_n),
+    bf(numtob ~ 1,
       nlf(mu1 ~ a1),
       nlf(mu2 ~ a2),
       nlf(mu3 ~ a3),
-      a1 + a2 + a3 ~ 1),
+      a1 + a2 + a3 ~ 1 + (1 | country) ),
     prior = c(prior(normal(0, 1), class = b, nlpar = a1),
       prior(normal(0, 1), class = b, nlpar = a2),
       prior(normal(0, 1), class = b, nlpar = a3)),

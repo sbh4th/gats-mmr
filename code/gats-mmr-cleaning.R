@@ -72,7 +72,7 @@ d1 <- d %>%
   # limit to recoded
   select(id, strata, cluster, weight, country, wbincg,
          numtob, wealth, hwarn, hrules, advert, danger,
-         knows, male, educ3, agegp)
+         knows, male, educ3, agegp, mpower)
 
 # add some labels
 d2 <- d1 %>%
@@ -93,7 +93,8 @@ d2 <- d1 %>%
   knows =  "Knowledge of smoking harms",
   male = "Male gender",
   educ3 = "Education category",
-  agegp = "Age group")
+  agegp = "Age group",
+  mpower = "MPOWER policy score")
 
 datasummary_skim(d2)
 

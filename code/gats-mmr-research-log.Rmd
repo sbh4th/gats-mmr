@@ -8,6 +8,8 @@ library(tidyverse)
 library(haven)
 library(modelsummary)
 library(labelled)
+library(gghighlight)
+library(patchwork)
 ```
 
 ## 2023-11-08
@@ -70,5 +72,49 @@ gats %>%
   group_by(knows) %>%
   summarise(n = sum(gatsweight)) %>%
   mutate(pct = n / sum(n) * 100)
+```
+
+## 2023-11-16
+Rationale for include interactions and varying effects. Although the raw dataset is quite large (>200k individual observations), it is still quite noisy when considering country-specific estimates by various combinations of demographic factors. For example, if we just group together both dual or poly tobacco use and want to assess how this may vary by gender and wealth, the country level estimates are quite noisy. Below shows the survey-weighted estimates of dual or poly use by country and wealth group, separately by gender. 
+```{r, warning=FALSE}
+# read in the cleaned GATS data
+gd <- read_rds(here("data-clean", "gats-clean.rds")) %>%
+  select(-hwarn) %>%
+  drop_na() %>%
+  mutate(poly = ifelse(numtob > 1, 1, 0))
+
+cinc <- gd %>% 
+  group_by(country, wealth, male) %>%
+  summarise(tru_prev = weighted.mean(poly, weight) * 100) 
+
+
+m <- cinc %>%
+  filter(male==1) %>%
+  ggplot(aes(x=wealth, y=tru_prev, 
+             colour = country)) + 
+  geom_line() + 
+  scale_x_continuous(breaks = c(1,2,3)) +
+  gghighlight(country %in% 
+    c("Bangladesh", "Senegal", "Romania")) + 
+  labs(x ='Wealth group', 
+       y ='Percentage of dual or poly-tobacco use' ) +
+  ggtitle("Men") +
+  theme_minimal()
+
+w <- cinc %>%
+  filter(male==0) %>%
+  ggplot(aes(x=wealth, y=tru_prev, 
+             colour = country)) + 
+  geom_line() + 
+  scale_x_continuous(breaks = c(1,2,3)) +
+  gghighlight(country %in% 
+    # c("Romania", "Botswana", "Costa Rica")) +
+      c("Bangladesh", "Senegal", "Romania")) +
+  labs(x ='Wealth group', 
+       y ='Percentage of dual or poly-tobacco use' ) +
+  ggtitle("Women") +
+  theme_minimal()
+
+m + w 
 ```
 

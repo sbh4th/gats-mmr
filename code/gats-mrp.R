@@ -14,9 +14,54 @@ gd <- read_rds(here("data-clean", "gats-clean.rds")) %>%
   mutate(poly = ifelse(numtob > 1, 1, 0))
 
 # Observed proportions of polytobacco use by country
-truth <- gd %>% 
+# using survey design parameters to get correct SEs
+library(survey)
+options(survey.lonely.psu="adjust")
+gds <- svydesign(
+  id=~cluster, strata=~strata, 
+  weights=~weight, data=gd, nest = TRUE)
+
+true_prev <- svyby(~poly, ~country, gds, svymean)
+
+true_prev <- true_prev %>%
+  mutate(truth = poly * 100,
+         true_se = se * 100) %>%
+  select(country, truth, true_se)
+
+# Now take a 10% sample
+sample_data <- gd %>% 
+  slice_sample(n = 1000) 
+
+sample_prev <- sample_data %>%
   group_by(country) %>%
-  summarise(tru_prev = weighted.mean(poly, weight) * 100) 
+  summarize(n = n(),
+    s_prev = 100 * (sum(poly * weight) / sum(weight)),
+    s_se = sqrt(s_prev * (100 - s_prev) / sum(n())))
+
+# combine truth and sampled and plot
+comp1 <- true_prev %>%
+  left_join(sample_prev) %>%
+  rename(est_1 = truth, est_2 = s_prev,
+         se_1 = true_se, se_2 = s_se) %>%
+  select(-n) %>%
+  pivot_longer(!country,
+    names_to = c(".value", "sample"),
+    names_sep="_") %>%
+  mutate(sample = recode(sample, `1` = "Truth",
+    `2` = "Sample"))
+
+comp1 %>%
+  ggplot(aes(x=est, y=country, 
+    color = sample, group = sample)) + 
+  geom_point(position=position_dodge(width=0.8)) +
+  geom_errorbar(aes(xmin = est - 2 * se,
+    xmax = est + 2 * se, width = 0),
+    position=position_dodge(width=0.8)) +
+  labs(x ='Percentage of dual or poly-tobacco use') +
+  theme_minimal()
+
+
+
   
 truth %>%
   mutate(country = fct_reorder(country, tru_prev)) %>% 
@@ -25,14 +70,29 @@ truth %>%
   labs(x ='Percentage of dual or poly-tobacco use', y ='Country' ) +
   theme_minimal()
 
-# take a 10% sample
-sample_data <- gd %>% 
-  slice_sample(n = 1000) 
+tp <- true_prev %>%
+  mutate(truth = poly * 100,
+         tru_se = se * 100) %>%
+  mutate(country = fct_reorder(country, truth)) %>% 
+  ggplot(mapping =aes(x=truth, y=country)) + 
+  geom_point(alpha = 0.7) + 
+  geom_errorbar(aes(xmin = truth - 2 * tru_se,
+               xmax = truth + 2 * tru_se, width = 0)) +
+  labs(x ='Percentage of dual or poly-tobacco use', y ='Country' ) +
+  theme_minimal()
+  
+  
 
-sample_summary <- sample_data %>%
-  mutate(poly = ifelse(numtob > 1, 1, 0)) %>%
-  group_by(country) %>%
-  summarise(estimate = mean(poly) * 100) 
+
+
+  summarise(estimate = mean(poly) * 100,
+            est_se = se(poly) * 100) 
+
+t_prev = 100 * (sum(poly * weight) / sum(weight)),
++               t_se = sqrt(t_prev * (100 - t_prev) / sum(n())^2)
+
+comp1 <- true_prev %>% left_join(sample_summary,
+                                 by = country)
 
 
 # a function to plot the state-level estimates against the truth
@@ -232,6 +292,15 @@ m_cv5 <-
         family ='binomial')
 
 
+
+state_df <- data.frame(
+  State = 1:50,
+  model_state_sd = rep(-1, 50),
+  model_state_pref = rep(-1, 50),
+  sample_state_pref = rep(-1, 50),
+  true_state_pref = rep(-1, 50),
+  N = rep(-1, 50)
+)
 
   
   

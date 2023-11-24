@@ -30,15 +30,16 @@ true_prev <- true_prev %>%
 
 # Now take a 10% sample
 sample_data <- gd %>% 
-  slice_sample(n = 1000) 
+  slice_sample(n = 10000) 
 
+# get sample prevalence of dual/poly tobacco use
 sample_prev <- sample_data %>%
   group_by(country) %>%
   summarize(n = n(),
     s_prev = 100 * (sum(poly * weight) / sum(weight)),
     s_se = sqrt(s_prev * (100 - s_prev) / sum(n())))
 
-# combine truth and sampled and plot
+# combine truth and sampled prevalence and plot
 comp1 <- true_prev %>%
   left_join(sample_prev) %>%
   rename(est_1 = truth, est_2 = s_prev,
@@ -58,42 +59,8 @@ comp1 %>%
     xmax = est + 2 * se, width = 0),
     position=position_dodge(width=0.8)) +
   labs(x ='Percentage of dual or poly-tobacco use') +
+  scale_colour_manual(values = c("#e41a1c", "#377eb8")) +
   theme_minimal()
-
-
-
-  
-truth %>%
-  mutate(country = fct_reorder(country, tru_prev)) %>% 
-  ggplot(mapping =aes(x=tru_prev, y=country)) + 
-  geom_point(alpha = 0.7) + 
-  labs(x ='Percentage of dual or poly-tobacco use', y ='Country' ) +
-  theme_minimal()
-
-tp <- true_prev %>%
-  mutate(truth = poly * 100,
-         tru_se = se * 100) %>%
-  mutate(country = fct_reorder(country, truth)) %>% 
-  ggplot(mapping =aes(x=truth, y=country)) + 
-  geom_point(alpha = 0.7) + 
-  geom_errorbar(aes(xmin = truth - 2 * tru_se,
-               xmax = truth + 2 * tru_se, width = 0)) +
-  labs(x ='Percentage of dual or poly-tobacco use', y ='Country' ) +
-  theme_minimal()
-  
-  
-
-
-
-  summarise(estimate = mean(poly) * 100,
-            est_se = se(poly) * 100) 
-
-t_prev = 100 * (sum(poly * weight) / sum(weight)),
-+               t_se = sqrt(t_prev * (100 - t_prev) / sum(n())^2)
-
-comp1 <- true_prev %>% left_join(sample_summary,
-                                 by = country)
-
 
 # a function to plot the state-level estimates against the truth
 compare_to_truth <- function(estimates, truth){ 
@@ -113,6 +80,14 @@ compare_to_truth <- function(estimates, truth){
 
 compare_to_truth(sample_summary, truth)
 
+# fit the multilevel model
+mrp1 <- 
+  glmer(poly ~ (1 | country) + (1 | agegp) + (1 | educ3) + 
+        (1 | wealth) + male +  (1 | male:educ3) + 
+        (1 | educ3:agegp) + 
+        (1 | male:wealth) + factor(wbincg) + 
+        mpower, data = sample_data, family = 'binomial')
+
 # fit a basic model
 model1 <- 
   glm(poly ~ male + as.factor(educ3) + agegp + 
@@ -122,16 +97,37 @@ tidy(model1)
 
 
 # create poststratification frame
+# get country-level predictors
+clp <- gd %>% 
+  select(country, wbincg, mpower) %>%
+  group_by(country) %>%
+  summarise_all(list(mean))
+
 psframe <- gd %>%
-  select(country, male, educ3, agegp, wealth, weight) %>%
+  select(country, male, educ3, agegp, wealth, 
+         wbincg, mpower, weight) %>%
   drop_na() %>%
   count(country, male, educ3, agegp, wealth,
-        wt = weight)
+        wt = weight) %>%
+  left_join(clp, by = join_by(country))
+  
 
 poststratified_estimates <- psframe %>%
-  add_predictions(model1, type = 'response') %>%
-  group_by(country) %>% 
-  summarize(estimate = weighted.mean(pred, n) * 100)
+  add_predictions(mrp1, type = 'response') %>%
+  group_by(country) %>%
+  mutate(wt = n / sum(n)) %>%
+  summarise(est = sum(pred * wt) * 100)
+
+ggplot(data = true_prev, aes(x = truth, y = country)) +
+  geom_point(color = "#e41a1c") + 
+  geom_errorbar(aes(xmin = truth - 2 * true_se,
+    xmax = truth + 2 * true_se, width = 0)) +
+  geom_point(data = poststratified_estimates,
+    aes(x = estimate, y = country))
+
+                geom_errorbar(
+    xmin = 
+  )
 
 compare_to_truth(poststratified_estimates, truth)
 

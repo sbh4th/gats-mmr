@@ -15,9 +15,9 @@ datasummary_skim(d)
 d1 <- d %>%
   mutate(
     # recode age group
-    agegp = cut(AGE, breaks = c(15,30,45,65,120),
-      right = FALSE, labels = c("15-29", "30-44", 
-      "45-64", "65+")),
+    agegp = cut(AGE, breaks = c(15,30,40,50,120),
+      right = FALSE, labels = c("15-29", "30-39", 
+      "40-49", "50+")),
          
    # recode education
    educ3 = ifelse(education<=1, 1,

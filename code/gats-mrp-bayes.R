@@ -7,6 +7,11 @@ library(modelr)
 library(lme4)
 library(gghighlight)
 library(patchwork)
+library(modelsummary)
+library(brms)
+library(tidybayes)
+options(mc.cores = 4,
+        brms.backend = "cmdstanr")
 
 # read in the cleaned GATS data
 gd <- read_rds(here("data-clean", "gats-clean.rds")) %>%
@@ -15,88 +20,35 @@ gd <- read_rds(here("data-clean", "gats-clean.rds")) %>%
   drop_na() %>%
   mutate(poly = ifelse(numtob > 1, 1, 0))
 
-# Observed proportions of polytobacco use by country
-# using survey design parameters to get correct SEs
-library(survey)
-options(survey.lonely.psu="adjust")
-gds <- svydesign(
-  id=~cluster, strata=~strata, 
-  weights=~weight, data=gd, nest = TRUE)
-
-true_prev <- svyby(~poly, ~country, gds, svymean)
-
-true_prev <- true_prev %>%
-  mutate(truth = poly * 100,
-         true_se = se * 100) %>%
-  select(country, truth, true_se)
-
-# Now take a 10% sample
+# Now take a sample to develop the model
 sample_data <- gd %>% 
-  slice_sample(n = 10000) 
+  slice_sample(n = 5000) 
 
-# get sample prevalence of dual/poly tobacco use
-sample_prev <- sample_data %>%
-  group_by(country) %>%
-  summarize(n = n(),
-    s_prev = 100 * (sum(poly * weight) / sum(weight)),
-    s_se = sqrt(s_prev * (100 - s_prev) / sum(n())))
+bm <- 
+  brm(poly ~ male + factor(wbincg) + mpower +
+        (1 | country), 
+        data = sample_data, 
+        family = bernoulli(),
+      prior = c(prior(normal(0, 3), class = Intercept),
+        prior(normal(0, 0.5), class = b), 
+        prior(exponential(1), class = sd)),
+      chains = 4, cores = 4, iter = 2000, seed = 298,
+      sample_prior = "yes")
 
-# combine truth and sampled prevalence and plot
-comp1 <- true_prev %>%
-  left_join(sample_prev) %>%
-  rename(est_1 = truth, est_2 = s_prev,
-         se_1 = true_se, se_2 = s_se) %>%
-  select(-n) %>%
-  pivot_longer(!country,
-    names_to = c(".value", "sample"),
-    names_sep="_") %>%
-  mutate(sample = recode(sample, `1` = "Truth",
-    `2` = "Sample"))
-
-comp1 %>%
-  ggplot(aes(x=est, y=country, 
-    color = sample, group = sample)) + 
-  geom_point(position=position_dodge(width=0.8)) +
-  geom_errorbar(aes(xmin = est - 2 * se,
-    xmax = est + 2 * se, width = 0),
-    position=position_dodge(width=0.8)) +
-  labs(x ='Percentage of dual or poly-tobacco use') +
-  scale_colour_manual(values = c("#e41a1c", "#377eb8")) +
-  theme_minimal()
-
-# a function to plot the state-level estimates against the truth
-compare_to_truth <- function(estimates, truth){ 
-  
-  d <-left_join(estimates, truth, by ='country' ) 
-  
-  ggplot(data = d, 
-         mapping = aes(x=estimate, y=tru_prev, label=country)) + 
-    geom_point(alpha = 0.5) + geom_text_repel() + 
-    theme_minimal() + 
-    geom_abline(intercept = 0, slope =1, linetype ='dashed' ) + 
-    labs(x ='Estimate' , y ='Truth' , 
-         caption =paste0( 'Correlation = ', 
-         round(cor(d$estimate, d$tru_prev), 2), 
-         ', Mean Absolute Error = ', 
-         round(mean(abs(d$estimate -d$tru_prev)), 3))) } 
-
-compare_to_truth(sample_summary, truth)
-
-# fit the multilevel model
-mrp1 <- 
-  glmer(poly ~ (1 | country) + (1 | agegp) + (1 | educ3) + 
-        (1 | wealth) + male +  (1 | male:educ3) + 
+bm2 <- 
+  brm(poly ~ male + factor(wbincg) + mpower +
+        (1 | wealth:country) + (1 | agegp) + 
+        (1 | educ3) + 
+        (1 | wealth) +  (1 | male:educ3) + 
         (1 | educ3:agegp) + 
-        (1 | male:wealth) + factor(wbincg) + 
-        mpower, data = sample_data, family = 'binomial')
-
-# fit a basic model
-model1 <- 
-  glm(poly ~ male + as.factor(educ3) + agegp + 
-         as.factor(wealth), 
-      data = sample_data, family ='binomial' )
-tidy(model1)
-
+        (1 | male:wealth), 
+        data = sample_data, 
+        family = bernoulli(),
+      prior = c(prior(normal(0, 3), class = Intercept),
+        prior(normal(0, 0.5), class = b), 
+        prior(exponential(1), class = sd)),
+      chains = 4, cores = 4, iter = 2000, seed = 3478,
+      adapt_delta = 0.99, sample_prior = "yes")
 
 # create poststratification frame
 # get country-level predictors
@@ -106,19 +58,55 @@ clp <- gd %>%
   summarise_all(list(mean))
 
 psframe <- gd %>%
-  select(country, male, educ3, agegp, wealth, 
-         wbincg, mpower, weight) %>%
+  select(country, male, educ3, agegp, 
+         wealth, weight) %>%
   drop_na() %>%
   count(country, male, educ3, agegp, wealth,
         wt = weight) %>%
   left_join(clp, by = join_by(country))
-  
 
 poststratified_estimates <- psframe %>%
-  add_predictions(mrp1, type = 'response') %>%
   group_by(country) %>%
   mutate(wt = n / sum(n)) %>%
-  summarise(est = sum(pred * wt) * 100)
+  add_epred_draws(bm, ndraws = 10,
+    allow_new_levels = TRUE) %>%
+  group_by(country, .draw) %>%
+  mutate(west = .epred * wt) %>%
+  summarise(wsum = sum(west)) %>%
+  summarise(mrp = mean(wsum) * 100, 
+            mrp_se = sd(wsum) * 100)
+%>%
+%>%
+  group_by(country) %>%
+   mutate(sumwt = sum(n),
+         wt = n / sum(n),
+         nobs = n(),
+         est = (.epred * n * 100),
+         mrp = sum(est) / sumwt,
+         wsqd = n * (.epred * 100 - mrp)^2,
+         sqds = sum(wsqd),
+         test = (.epred * wt * 100)) %>%
+  filter(country=="India") %>%
+  group_by(.draw) %>%
+  mutate(west = .epred * wt) %>%
+  summarise(wsum = sum(west))
+
+
+, wsum = sum(west)) %>%
+  ungroup() 
+%>%
+  summarise(mean = mean(wsum) * 100, std = sd(wsum) * 100)
+  
+%>%
+  summarise_at(c("mrp", "sqds", 
+                 "nobs", "sumwt"), max) %>%
+  mutate(mrpsd = sqrt(sqds / sumwt * (nobs - 1) / nobs)) %>%
+  select(country, mrp, mrpsd)
+
+
+epred_mat <- add_epred_draws(
+  bm, newdata = psframe, draws = 1000)
+mrp_estimates_vector <- epred_mat %*% psframe$n / sum(psframe$n)
 
 ggplot(data = true_prev, aes(x = truth, y = country)) +
   geom_point(color = "#e41a1c") + 
@@ -299,6 +287,32 @@ state_df <- data.frame(
   true_state_pref = rep(-1, 50),
   N = rep(-1, 50)
 )
+
+
+fit <- stan_glmer(
+  poly ~ male + factor(wbincg) + mpower +
+        (1 | country),
+  family = binomial(link = "logit"),
+  data = sample_data,
+  prior = normal(0, 1, autoscale = TRUE),
+  prior_covariance = decov(scale = 0.50),
+  adapt_delta = 0.99,
+  refresh = 0,
+  seed = 1010)
+
+epred_mat <- posterior_epred(fit, newdata = psframe, draws = 10)
+mrp_estimates_vector <- epred_mat %*% psframe$n / sum(psframe$n)
+mrp_estimate <- c(mean = mean(mrp_estimates_vector) * 100, sd = sd(mrp_estimates_vector) * 100)
+cat("MRP estimate mean, sd: ", round(mrp_estimate, 3))
+
+
+
+filtering_condition <- which(psframe$country == "China")
+state_epred_mat <- epred_mat[ ,filtering_condition]
+k_filtered <- psframe[filtering_condition, ]$n
+mrp_estimates_vector_sub <- state_epred_mat %*% k_filtered / sum(k_filtered)
+mrp_estimate_sub <- c(mean = mean(mrp_estimates_vector_sub) * 100, sd = sd(mrp_estimates_vector_sub) * 100)
+cat("MRP sub-estimate mean, sd: ", round(mrp_estimate_sub, 3))
 
   
   

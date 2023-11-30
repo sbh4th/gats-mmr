@@ -1,0 +1,50 @@
+---
+title: "GATS Methods"
+format: html
+editor: source
+code-fold: true
+---
+```{r setup, message=F}
+library(here)
+library(tidyverse)
+library(labelled)
+library(kableExtra)
+```
+
+## General approach
+
+The primary purpose of this analysis is to describe the prevalence of dual and poly-tobacco use in selected LMICs using the GATS surveys. 
+
+Read in the GATS survey
+```{r}
+gd <- read_rds(here("data-clean", "gats-clean.rds")) %>%
+  select(-hwarn) %>%
+  remove_var_label() %>%
+  drop_na() %>%
+  mutate(poly = ifelse(numtob > 1, 1, 0))
+
+kbl(head(gd)) %>% 
+  kable_styling()
+```
+
+Although the overall size of the GATS survey dataset is large (N = ~230,000), the cell sizes for individual countries get quite small once we begin stratifying on demographic and other factors. For example
+
+```{r}
+gd %>% 
+  count(country, male, agegp, wealth) %>% 
+  pivot_wider(names_from = agegp, 
+    values_from = n, names_prefix = "Age") %>% 
+  pivot_wider(names_from = wealth, 
+   values_from = starts_with("Age"), 
+   names_prefix = "WQ") %>% 
+  kbl() %>% kable_styling()
+```
+
+You can see, for example, when just stratifying by sex, wealth, and agegroup we have a number of cells <10 (Botswana) and others (Tanzania) that are <20. This leads to uncertainty and means we cannot, for example, generate estimates for important subpopulations within countries. 
+
+## Statistical methods
+
+### Multi-level Regression and Poststratification
+
+One of the primary benefits of the MRP approach is that it allows for the estimation o
+

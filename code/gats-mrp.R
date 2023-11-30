@@ -25,10 +25,18 @@ gds <- svydesign(
 
 true_prev <- svyby(~poly, ~country, gds, svymean)
 
+
 true_prev <- true_prev %>%
   mutate(truth = poly * 100,
          true_se = se * 100) %>%
   select(country, truth, true_se)
+
+tp_sex <- svyby(~poly, ~country + male, gds, svymean)
+tp_sex <- tp_sex %>%
+  mutate(truth = poly * 100,
+         true_se = se * 100) %>%
+  select(country, male, truth, true_se)
+
 
 # Now take a 10% sample
 sample_data <- gd %>% 
@@ -37,7 +45,13 @@ sample_data <- gd %>%
 # get sample prevalence of dual/poly tobacco use
 sample_prev <- sample_data %>%
   group_by(country) %>%
-  summarize(n = n(),
+  summarise(
+    s_prev = 100 * (sum(poly * weight) / sum(weight)),
+    s_se = sqrt(s_prev * (100 - s_prev) / sum(n())))
+
+sp_sex <- sample_data %>%
+    group_by(country, male) %>%
+  summarise(
     s_prev = 100 * (sum(poly * weight) / sum(weight)),
     s_se = sqrt(s_prev * (100 - s_prev) / sum(n())))
 
@@ -46,7 +60,6 @@ comp1 <- true_prev %>%
   left_join(sample_prev) %>%
   rename(est_1 = truth, est_2 = s_prev,
          se_1 = true_se, se_2 = s_se) %>%
-  select(-n) %>%
   pivot_longer(!country,
     names_to = c(".value", "sample"),
     names_sep="_") %>%
@@ -56,10 +69,34 @@ comp1 <- true_prev %>%
 comp1 %>%
   ggplot(aes(x=est, y=country, 
     color = sample, group = sample)) + 
-  geom_point(position=position_dodge(width=0.8)) +
+  geom_point(alpha = 0.7) +
   geom_errorbar(aes(xmin = est - 2 * se,
     xmax = est + 2 * se, width = 0),
-    position=position_dodge(width=0.8)) +
+    alpha = 0.7) +
+  labs(x ='Percentage of dual or poly-tobacco use') +
+  scale_colour_manual(values = c("#e41a1c", "#377eb8")) +
+  theme_minimal()
+
+
+# combine truth and sampled prevalence and plot
+comp2 <- tp_sex %>%
+  left_join(sp_sex, join_by(country, male)) %>%
+  rename(est_1 = truth, est_2 = s_prev,
+         se_1 = true_se, se_2 = s_se) %>%
+  pivot_longer(cols = est_1:se_2,
+    names_to = c(".value", "sample"),
+    names_sep="_") %>%
+  mutate(sample = recode(sample, `1` = "Truth",
+    `2` = "Sample"))
+
+comp2 %>%
+  ggplot(aes(x=est, y=country, 
+    color = sample, group = sample)) + 
+  geom_point(alpha = 0.7) +
+  geom_errorbar(aes(xmin = est - 2 * se,
+    xmax = est + 2 * se, width = 0),
+    alpha = 0.7) +
+  facet_grid(cols = vars(male)) +
   labs(x ='Percentage of dual or poly-tobacco use') +
   scale_colour_manual(values = c("#e41a1c", "#377eb8")) +
   theme_minimal()

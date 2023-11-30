@@ -23,7 +23,8 @@ gd <- read_rds(here("data-clean", "gats-clean.rds")) %>%
 # Now take a sample to develop the model
 sample_data <- gd %>% 
   slice_sample(n = 5000) %>%
-  mutate(wbincg = factor(wbincg))
+  mutate(wbincg = factor(wbincg),
+         ageg = as.numeric(agegp))
 
 bm <- 
   brm(poly ~ male + wbincg + mpower +
@@ -182,7 +183,6 @@ pe_sex_wealth %>%
   facet_grid(cols = vars(male),
              rows = vars(wealth)) +
   theme_minimal()
-
 
 
 
@@ -411,7 +411,7 @@ b14.1 <-
       seed = 867530)
 
 
-p <- avg_predictions(              # Compute predictions,
+p <- predictions(              # Compute predictions,
     model = bm2,               # using the multilevel regression model `mod`, 
     newdata = psframe,  # for each row of the `stratification` table.
     by = c("country", "male", "wealth"),               # Then, take the weighted average of predictions by city,
@@ -429,20 +429,23 @@ p |>
              rows = vars(wealth)) +
   theme_minimal()
 
-p |> 
+pd <- p |> 
     # extract draws from the posterior distribution
     posterior_draws() |>
+    #group_by(country) |>
+    #median_qi(draw)
     mutate(mrp = draw * 100) |>
-    # sort cities by interest in meat substitutes
-    arrange(estimate) |>
+    # median_qi(mrp) |>
     mutate(country = factor(country, 
       levels = rev(unique(country)))) |>
     # plot the results
-    ggplot(aes(y = country, colour = male, 
-      group = interaction(country, male), fill = male)) +
-    geom_density_ridges() +
-    # facet_wrap(~male) +
-    theme_minimal() +
+    ggplot(aes(y = country, x = mrp)) +
+    #geom_density_ridges() +
+    stat_pointinterval(point_size = 0.2) + 
+    facet_grid(cols = vars(male),
+             rows = vars(wealth)) +
+    theme_minimal() 
+    +
     theme(panel.grid = element_blank()) +
     labs(
         x = "Average proportion dual/poly tobacco use",

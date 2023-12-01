@@ -48,3 +48,32 @@ You can see, for example, when just stratifying by sex, wealth, and agegroup we 
 
 One of the primary benefits of the MRP approach is that it allows for the estimation o
 
+We can define our multi-level model as follows: 
+
+$$
+Pr(y_i = 1) = logit^{-1}(
+\alpha_{\rm c[i]}^{\rm country}
++ \alpha_{\rm a[i]}^{\rm age}
++ \alpha_{\rm w[i]}^{\rm wealth}
++ \alpha_{\rm e[i]}^{\rm educ}
++ \beta^{\rm male} \cdot {\rm Male}_{\rm i} 
++ \alpha_{\rm g[i], r[i]}^{\rm male.eth}
++ \alpha_{\rm e[i], a[i]}^{\rm educ.age}
++ \alpha_{\rm e[i], r[i]}^{\rm educ.eth}
+)
+$$
+Or this:
+
+$$
+\begin{aligned}
+&\ \textbf{Probability of selection of alternative}_i \textbf{ in subject}_j \\
+\text{Choice}_{i_j} \sim&\ \operatorname{Poisson}(\lambda_{i_j}) \\[10pt]
+&\ \textbf{Model for probability of each option} \\
+\log(\lambda_{i_j}) =&\ (\beta_0 + b_{0_j}) + \beta_1 \text{Dark}_{i_j} + \beta_2 \text{Soft}_{i_j} + \beta_3 \text{Nuts}_{i_j} \\[5pt]
+b_{0_j} \sim&\ \mathcal{N}(0, \sigma_0) \qquad\qquad\quad \text{Subject-specific offsets from global choice probability} \\[10pt]
+&\ \textbf{Priors} \\
+\beta_0 \sim&\ \mathcal{N}(0, 3) \qquad\qquad\quad\ \ \text{Prior for global average choice probability} \\
+\beta_1, \beta_2, \beta_3 \sim&\ \mathcal{N}(0, 3) \qquad\qquad\quad\ \ \text{Prior for candy feature levels} \\
+\sigma_0 \sim&\ \operatorname{Exponential}(1) \qquad \text{Prior for between-subject variability}
+\end{aligned}
+$$

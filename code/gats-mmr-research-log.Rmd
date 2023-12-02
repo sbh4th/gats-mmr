@@ -118,3 +118,114 @@ w <- cinc %>%
 m + w 
 ```
 
+## 2023-12-02
+Experimented with the impact of allowing for outcome categories to be correlated within groups. Partly based on this bit from Andrew Heiss's [blog](https://www.andrewheiss.com/blog/2023/08/12/conjoint-multilevel-multinomial-guide/#bayesian-model-with-brms):
+
+> And also notice the slightly different syntax for the random respondent intercepts: (1 | ID | resp.id). That new middle ID is special {brms} formula syntax that we can use when working with categorical or ordinal families, and it makes it so that the group-level effects for the different outcomes (here options 0, 1, 2, and 3) are correlated (see p. 4 of this {brms} vignette for more about this special syntax).
+
+Here is the model for setting the outcome categories within the multinomial outcome to be uncorrelated, but allowing for a random slope for wealth: 
+```{r, eval = F}
+m2 <- 
+  brm(numtob ~ 1 + (1 | wealth) + 
+        (1 + wealth | country), 
+    data = sample_data, 
+    family = categorical(link = "logit"),
+    chains = 4, cores = 4, iter = 2000, seed = 1234)
+```
+
+Correlated outcomes but without a random slope for wealth:
+
+```{r eval = F}
+m3 <- 
+  brm(numtob ~ 1 + (1 | wealth) + 
+        (1 | ID | country), 
+    data = sample_data, 
+    family = categorical(link = "logit"),
+    chains = 4, cores = 4, iter = 2000, seed = 1234)
+```
+
+And now allowing for correlated outcomes and random slopes for wealth:
+```{r, eval = F}
+m4 <- 
+  brm(numtob ~ 1 + (1 | wealth) + 
+        (1 + wealth | ID | country), 
+    data = sample_data, 
+    family = categorical(link = "logit"),
+    chains = 4, cores = 4, iter = 2000, seed = 1234)`
+```
+Results:
+
+|                                          |   M2    |   M3    |   M4    |
+|:-----------------------------------------|:-------:|:-------:|:-------:|
+|b_mu1_Intercept                           | -1.471  | -1.420  | -1.463  |
+|                                          | (0.233) | (0.380) | (0.241) |
+|b_mu2_Intercept                           | -3.817  | -3.683  | -3.790  |
+|                                          | (0.367) | (0.391) | (0.378) |
+|b_mu3_Intercept                           | -8.190  | -7.848  | -8.163  |
+|                                          | (1.830) | (1.355) | (1.869) |
+|sd_country__mu1_Intercept                 |  0.665  |  0.620  |  0.617  |
+|                                          | (0.223) | (0.125) | (0.197) |
+|sd_country__mu1_wealth                    |  0.265  |         |  0.243  |
+|                                          | (0.071) |         | (0.065) |
+|sd_country__mu2_Intercept                 |  1.302  |  0.910  |  1.066  |
+|                                          | (0.503) | (0.277) | (0.435) |
+|sd_country__mu2_wealth                    |  0.582  |         |  0.472  |
+|                                          | (0.195) |         | (0.160) |
+|sd_country__mu3_Intercept                 |  1.297  |  0.952  |  1.222  |
+|                                          | (1.185) | (0.810) | (1.029) |
+|sd_country__mu3_wealth                    |  0.525  |         |  0.486  |
+|                                          | (0.471) |         | (0.460) |
+|cor_country__mu1_Intercept__mu1_wealth    | -0.483  |         | -0.316  |
+|                                          | (0.297) |         | (0.281) |
+|cor_country__mu2_Intercept__mu2_wealth    | -0.698  |         | -0.444  |
+|                                          | (0.204) |         | (0.300) |
+|cor_country__mu3_Intercept__mu3_wealth    | -0.267  |         | -0.076  |
+|                                          | (0.724) |         | (0.434) |
+|cor_country__mu1_Intercept__mu2_Intercept |         |  0.719  |  0.323  |
+|                                          |         | (0.188) | (0.311) |
+|cor_country__mu1_Intercept__mu3_Intercept |         |  0.140  |  0.149  |
+|                                          |         | (0.493) | (0.402) |
+|cor_country__mu2_Intercept__mu3_Intercept |         |  0.030  |  0.164  |
+|                                          |         | (0.487) | (0.399) |
+|cor_country__mu1_wealth__mu2_Intercept    |         |         | -0.002  |
+|                                          |         |         | (0.322) |
+|cor_country__mu1_Intercept__mu2_wealth    |         |         |  0.011  |
+|                                          |         |         | (0.328) |
+|cor_country__mu1_wealth__mu2_wealth       |         |         |  0.431  |
+|                                          |         |         | (0.270) |
+|cor_country__mu1_wealth__mu3_Intercept    |         |         | -0.061  |
+|                                          |         |         | (0.391) |
+|cor_country__mu2_wealth__mu3_Intercept    |         |         | -0.144  |
+|                                          |         |         | (0.385) |
+|cor_country__mu1_Intercept__mu3_wealth    |         |         |  0.069  |
+|                                          |         |         | (0.413) |
+|cor_country__mu1_wealth__mu3_wealth       |         |         | -0.045  |
+|                                          |         |         | (0.399) |
+|cor_country__mu2_Intercept__mu3_wealth    |         |         |  0.044  |
+|                                          |         |         | (0.417) |
+|cor_country__mu2_wealth__mu3_wealth       |         |         | -0.076  |
+|                                          |         |         | (0.405) |
+|sd_wealth__mu1_Intercept                  |  0.241  |  0.537  |  0.235  |
+|                                          | (0.220) | (0.368) | (0.211) |
+|sd_wealth__mu2_Intercept                  |  0.249  |  0.423  |  0.262  |
+|                                          | (0.253) | (0.352) | (0.281) |
+|sd_wealth__mu3_Intercept                  |  1.691  |  1.150  |  1.662  |
+|                                          | (1.647) | (1.104) | (1.593) |
+|Num.Obs.                                  |  5000   |  5000   |  5000   |
+|ELPD                                      | -3176.4 | -3196.6 | -3177.1 |
+|ELPD s.e.                                 |  51.4   |  51.5   |  51.4   |
+|LOOIC                                     | 6352.8  | 6393.3  | 6354.3  |
+|LOOIC s.e.                                |  102.8  |  103.0  |  102.8  |
+|WAIC                                      | 6351.8  | 6392.5  | 6353.2  |
+
+You can see that allowing for correlated outcomes increases the number of estimated parameters, but this doesn't seem to affect the overall estimated intercepts, so this may be inefficient. Let's compare these 3 models using leave-one-out cross-validation:
+
+Model comparisons using `loo`:
+```{r, eval=F}
+> loo_compare(m2, m3, m4, criterion = "loo") %>% print(simplify = F)
+   elpd_diff se_diff elpd_loo se_elpd_loo p_loo   se_p_loo looic   se_looic
+m2     0.0       0.0 -3176.4     51.4        53.3     4.4   6352.8   102.8 
+m4    -0.7       1.7 -3177.1     51.4        50.2     4.1   6354.3   102.8 
+m3   -20.2       6.8 -3196.6     51.5        34.0     3.1   6393.3   103.0 
+```
+Both models that allow for a random slope for wealth outperform the model without a random slope for wealth, and this is true for M4 even though it includes many additional parameters. However, on the whole it seems that allowing for correlated outcomes does not substantively or statistically improve the model. 

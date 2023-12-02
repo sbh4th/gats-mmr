@@ -80,6 +80,16 @@ psframe <- gd %>%
         wt = weight) %>%
   left_join(clp, by = join_by(country))
 
+f_psframe <- gd %>%
+  dplyr::select(country, male, educ3, agegp, 
+         wealth, weight) %>%
+  drop_na() %>%
+  count(country, male, educ3, agegp, wealth,
+        wt = weight) %>%
+  complete(country, male, educ3, agegp, wealth) %>%
+  mutate(n = ifelse(is.na(n), 0, n)) %>%
+  left_join(clp, by = join_by(country))
+
 # add model predictions to poststratification frame
 poststratified_estimates <- psframe %>%
   group_by(country) %>%
@@ -453,6 +463,55 @@ pd <- p |>
         title = "Estimated polytobacco use",
         subtitle = "Multilevel Regression and Poststratification",
         caption = "Source: GATS Surveys")
+
+
+# now for the multinomial model
+m4 <- 
+  brm(numtob ~ 1 + (1 | wealth) + 
+        (1 + wealth | ID | country), 
+    data = sample_data, 
+    family = categorical(link = "logit"),
+    #prior = c(
+     # prior(normal(0, 3), class = Intercept),
+      # prior(normal(0, 3), class = b),
+      #prior(exponential(1), class = sd)),
+    chains = 4, cores = 4, iter = 2000, seed = 1234)
+
+# add model predictions to poststratification frame
+ps_mlogit <- psframe %>%
+  group_by(country) %>%
+
+# generate weights for each country
+  mutate(wt = n / sum(n)) %>%
+  
+# add predicted draws from posterior 
+  add_epred_draws(m1, ndraws = 10,
+    allow_new_levels = TRUE) %>%
+  group_by(country, .category, .draw) %>%
+  
+# generate weighted predictions
+  mutate(west = .epred * wt) %>%
+  summarise(wsum = sum(west)) %>%
+  
+# post stratified estimates
+  summarise(mrp = mean(wsum) * 100, 
+            mrp_se = sd(wsum) * 100)
+
+# make a plot
+ps_mlogit %>%
+  filter(.category != "0" ) %>%
+  mutate(cat = recode(.category, `0` = "None",
+    `1` = "Single", `2` = "Dual", `3` = "Poly")) %>%
+  ggplot(aes(y = country, x = mrp, 
+             group = cat, color = cat)) +
+    geom_errorbar(aes(xmin = mrp - mrp_se, 
+      xmax = mrp + mrp_se),
+      position = position_dodge(0.8), width = 0.2) +
+    geom_point(position = position_dodge(0.8)) +
+  theme_minimal()
+
+
+  
 
   
   
